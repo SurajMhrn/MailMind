@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1060" viewBox="0 0 1400 1060" font-family="Segoe UI, Arial, sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect width="1400" height="1060" fill="#FFFFFF"/>
+<text x="40" y="52" font-size="26" font-weight="600" fill="#2C2C2A">Cold Mail Agent — pipeline architecture</text>
+<text x="40" y="80" font-size="15" fill="#5F5E5A">Agentic RAG cold emails for job hunting · Streamlit UI (app.py) · Qwen via Groq · Apify · Gmail</text>
+<rect x="40" y="104" width="420" height="676" rx="16" fill="#FBFBFA" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="64" y="136" font-size="18" font-weight="600" fill="#2C2C2A">1 · Find openings</text>
+<text x="436" y="136" text-anchor="end" font-size="13" font-family="Consolas, monospace" fill="#5F5E5A">agent/scout.py</text>
+<rect x="70.0" y="168" width="360" height="62" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="1"/>
+<text x="250.0" y="190.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#2C2C2A">Company website + preference</text>
+<text x="250.0" y="211.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#5F5E5A">e.g. “data analyst internship”</text>
+<path d="M250.0 233 L250.0 250" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="70.0" y="254" width="360" height="62" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="1"/>
+<text x="250.0" y="276.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#2C2C2A">Homepage reader</text>
+<text x="250.0" y="297.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#5F5E5A">requests + BeautifulSoup → careers links</text>
+<path d="M250.0 319 L250.0 336" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="70.0" y="340" width="360" height="62" rx="8" fill="#FAECE7" stroke="#993C1D" stroke-width="1"/>
+<text x="250.0" y="362.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#712B13">Apify Website Content Crawler</text>
+<text x="250.0" y="383.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#993C1D">JS-rendered pages, career-like links</text>
+<path d="M250.0 405 L250.0 422" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="70.0" y="426" width="360" height="62" rx="8" fill="#FAECE7" stroke="#993C1D" stroke-width="1"/>
+<text x="250.0" y="448.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#712B13">External job board crawl</text>
+<text x="250.0" y="469.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#993C1D">Greenhouse / Lever / Workable index</text>
+<path d="M250.0 491 L250.0 508" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="70.0" y="512" width="360" height="62" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="1"/>
+<text x="250.0" y="534.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#2C2C2A">Email extraction &amp; ranking</text>
+<text x="250.0" y="555.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#5F5E5A">careers@, hr@ first · noreply@ dropped</text>
+<path d="M250.0 577 L250.0 594" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="70.0" y="598" width="360" height="62" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="1"/>
+<text x="250.0" y="620.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#3C3489">Qwen: match openings to resume</text>
+<text x="250.0" y="641.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#534AB7">openings + fit score + reason</text>
+<path d="M250.0 663 L250.0 680" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="70.0" y="684" width="360" height="62" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="1"/>
+<text x="250.0" y="706.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#2C2C2A">You pick an opening + recipient</text>
+<text x="250.0" y="727.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#5F5E5A">“Draft email for this opening”</text>
+<rect x="490" y="104" width="420" height="676" rx="16" fill="#FBFBFA" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="514" y="136" font-size="18" font-weight="600" fill="#2C2C2A">2 · Write email</text>
+<text x="886" y="136" text-anchor="end" font-size="13" font-family="Consolas, monospace" fill="#5F5E5A">agent/agent.py</text>
+<rect x="520.0" y="168" width="360" height="62" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="1"/>
+<text x="700.0" y="190.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#2C2C2A">Target + style options</text>
+<text x="700.0" y="211.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#5F5E5A">job URL / JD, recipient, tone, CTA</text>
+<path d="M700.0 233 L700.0 250" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="520.0" y="254" width="360" height="62" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="1"/>
+<text x="700.0" y="276.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#3C3489">Agent loop (Qwen tool calling)</text>
+<text x="700.0" y="297.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#534AB7">fetch_webpage · search_knowledge_base ×N</text>
+<path d="M700.0 319 L700.0 336" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="520.0" y="340" width="360" height="62" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="1"/>
+<text x="700.0" y="362.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#3C3489">Reviewer pass</text>
+<text x="700.0" y="383.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#534AB7">critique vs style rules → rewrite</text>
+<path d="M700.0 405 L700.0 422" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="520.0" y="426" width="360" height="62" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="1"/>
+<text x="700.0" y="448.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#2C2C2A">Guardrails</text>
+<text x="700.0" y="469.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#5F5E5A">real email only · no inflated claims</text>
+<path d="M700.0 491 L700.0 508" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="520.0" y="512" width="360" height="62" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="1"/>
+<text x="700.0" y="534.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#2C2C2A">You review &amp; edit</text>
+<text x="700.0" y="555.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#5F5E5A">refine with AI · attach resume PDF</text>
+<path d="M700.0 577 L700.0 594" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="520.0" y="598" width="360" height="62" rx="8" fill="#FAECE7" stroke="#993C1D" stroke-width="1"/>
+<text x="700.0" y="620.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#712B13">Send via Gmail SMTP</text>
+<text x="700.0" y="641.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#993C1D">Message-ID kept for threading</text>
+<path d="M700.0 663 L700.0 680" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="520.0" y="684" width="360" height="62" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
+<text x="700.0" y="706.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#085041">Log to data/sent.json</text>
+<text x="700.0" y="727.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#0F6E56">to, subject, body, evidence</text>
+<rect x="940" y="104" width="420" height="676" rx="16" fill="#FBFBFA" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="964" y="136" font-size="18" font-weight="600" fill="#2C2C2A">3 · Sent &amp; follow-ups</text>
+<text x="1336" y="136" text-anchor="end" font-size="13" font-family="Consolas, monospace" fill="#5F5E5A">agent/followup.py</text>
+<rect x="970.0" y="168" width="360" height="62" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
+<text x="1150.0" y="190.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#085041">Sent log</text>
+<text x="1150.0" y="211.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#0F6E56">awaiting · replied · bounced · closed</text>
+<path d="M1150.0 233 L1150.0 250" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="970.0" y="254" width="360" height="62" rx="8" fill="#FAECE7" stroke="#993C1D" stroke-width="1"/>
+<text x="1150.0" y="276.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#712B13">Inbox check via Gmail IMAP</text>
+<text x="1150.0" y="297.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#993C1D">replies and bounce notices</text>
+<path d="M1150.0 319 L1150.0 336" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="970.0" y="340" width="360" height="62" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="1"/>
+<text x="1150.0" y="362.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#2C2C2A">Follow-up schedule</text>
+<text x="1150.0" y="383.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#5F5E5A">due after 4 and 7 days</text>
+<path d="M1150.0 405 L1150.0 422" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="970.0" y="426" width="360" height="62" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="1"/>
+<text x="1150.0" y="448.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#3C3489">Qwen: draft follow-up</text>
+<text x="1150.0" y="469.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#534AB7">40–80 words, one new proof point</text>
+<path d="M1150.0 491 L1150.0 508" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="970.0" y="512" width="360" height="62" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="1"/>
+<text x="1150.0" y="534.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#2C2C2A">You review</text>
+<text x="1150.0" y="555.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#5F5E5A">edit, tick “reviewed”</text>
+<path d="M1150.0 577 L1150.0 594" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="970.0" y="598" width="360" height="62" rx="8" fill="#FAECE7" stroke="#993C1D" stroke-width="1"/>
+<text x="1150.0" y="620.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#712B13">Send as “Re:” in same thread</text>
+<text x="1150.0" y="641.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#993C1D">In-Reply-To + References headers</text>
+<path d="M1150.0 663 L1150.0 680" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="970.0" y="684" width="360" height="62" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="1"/>
+<text x="1150.0" y="706.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#2C2C2A">Stop</text>
+<text x="1150.0" y="727.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#5F5E5A">on reply, bounce or 2 follow-ups</text>
+<path d="M433.0 715.0 L475 715.0 L475 199.0 L516.0 199.0" fill="none" stroke="#534AB7" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#a)"/>
+<text x="475" y="96" text-anchor="middle" font-size="12.5" fill="#534AB7">pre-fills the target</text>
+<path d="M883.0 715.0 L925 715.0 L925 199.0 L966.0 199.0" fill="none" stroke="#534AB7" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#a)"/>
+<text x="925" y="96" text-anchor="middle" font-size="12.5" fill="#534AB7">logged for follow-up</text>
+<rect x="40" y="822" width="1320" height="150" rx="16" fill="#FBFBFA" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="64" y="854" font-size="18" font-weight="600" fill="#2C2C2A">Shared services</text>
+<text x="1336" y="854" text-anchor="end" font-size="13" fill="#5F5E5A">configured in .env · keys never leave your machine except to their own service</text>
+<rect x="70" y="878" width="300" height="66" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
+<text x="220.0" y="902.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#085041">RAG knowledge base</text>
+<text x="220.0" y="923.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#0F6E56">rag.py · resume PDF → chunks → BM25</text>
+<rect x="390" y="878" width="300" height="66" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="1"/>
+<text x="540.0" y="902.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#3C3489">Qwen LLM on Groq</text>
+<text x="540.0" y="923.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#534AB7">llm.py · qwen3.8-27b · retry on 429</text>
+<rect x="710" y="878" width="300" height="66" rx="8" fill="#FAECE7" stroke="#993C1D" stroke-width="1"/>
+<text x="860.0" y="902.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#712B13">Apify API</text>
+<text x="860.0" y="923.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#993C1D">apify.py · Website Content Crawler</text>
+<rect x="1030" y="878" width="300" height="66" rx="8" fill="#FAECE7" stroke="#993C1D" stroke-width="1"/>
+<text x="1180.0" y="902.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="600" fill="#712B13">Gmail SMTP + IMAP</text>
+<text x="1180.0" y="923.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#993C1D">mailer.py · App Password from .env</text>
+<path d="M250.0 784 L250.0 816" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<text x="260.0" y="805.0" font-size="12.5" fill="#5F5E5A">uses</text>
+<path d="M700.0 784 L700.0 816" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<text x="710.0" y="805.0" font-size="12.5" fill="#5F5E5A">uses</text>
+<path d="M1150.0 784 L1150.0 816" fill="none" stroke="#888780" stroke-width="1.6" marker-end="url(#a)"/>
+<text x="1160.0" y="805.0" font-size="12.5" fill="#5F5E5A">uses</text>
+<rect x="40" y="1008" width="18" height="18" rx="4" fill="#EEEDFE" stroke="#534AB7"/>
+<text x="68" y="1022" font-size="14" fill="#444441">Qwen LLM step</text>
+<rect x="204.2" y="1008" width="18" height="18" rx="4" fill="#E1F5EE" stroke="#0F6E56"/>
+<text x="232.2" y="1022" font-size="14" fill="#444441">Data / retrieval (RAG, sent log)</text>
+<rect x="509.0" y="1008" width="18" height="18" rx="4" fill="#FAECE7" stroke="#993C1D"/>
+<text x="537.0" y="1022" font-size="14" fill="#444441">External service (Apify, Gmail)</text>
+<rect x="806.4" y="1008" width="18" height="18" rx="4" fill="#F1EFE8" stroke="#888780"/>
+<text x="834.4" y="1022" font-size="14" fill="#444441">Your input / app logic</text>
+<text x="1360" y="1022" text-anchor="end" font-size="13" fill="#888780">Nothing is sent without your explicit review and click.</text>
+</svg>

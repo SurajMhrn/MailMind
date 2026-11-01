@@ -1,0 +1,15 @@
+# Secrets and local state
+.env
+data/
+
+# Personal documents: add your own resume locally (see README)
+knowledge/resume/*
+!knowledge/resume/.gitkeep
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+
+# Office lock files
+~$*

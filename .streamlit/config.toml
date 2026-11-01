@@ -1,0 +1,15 @@
+[client]
+# Hide Streamlit's developer menu and Deploy button; only the app's own About item remains.
+toolbarMode = "minimal"
+showErrorDetails = "type"
+
+[server]
+# Resume and project documents only; keeps uploads small.
+maxUploadSize = 10
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+# Matches the logo.
+primaryColor = "#534AB7"
