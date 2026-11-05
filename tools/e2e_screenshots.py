@@ -143,11 +143,46 @@ def step_sent(page: Page, base: str) -> None:
     page.screenshot(path=SHOTS / "sent.png")
 
 
+def step_jobsearch(page: Page, base: str) -> None:
+    page.goto(base + "job-search")
+    wait_ready(page, "Search jobs worldwide")
+    head_tags(page, "Job search")
+    page.get_by_role("button", name="Search jobs").click()  # no keywords yet
+    expect(page.get_by_text("Enter at least one job title or keyword.")).to_be_visible(timeout=15_000)
+    check("job search: validation message", True)
+    no_horizontal_scroll(page, "job search (desktop)")
+    page.screenshot(path=SHOTS / "job_search.png")
+
+
+def step_bulk(page: Page, base: str, sheet: str) -> None:
+    page.goto(base + "bulk-send")
+    wait_ready(page, "Email many openings")
+    head_tags(page, "Bulk send")
+    uploader = page.locator('[data-testid="stFileUploader"]').filter(has_text="Openings sheet")
+    uploader.locator('input[type="file"]').set_input_files(sheet)
+    expect(page.get_by_text("2 · Draft the emails")).to_be_visible(timeout=30_000)
+    check("bulk send: sheet read and rows checked", True, page.locator('[data-testid="stMetric"]').first.inner_text().replace("\n", " "))
+    no_horizontal_scroll(page, "bulk send (desktop, sheet loaded)")
+    page.screenshot(path=SHOTS / "bulk_send.png")
+
+
+def step_mobile_new(browser, base: str) -> None:
+    ctx = browser.new_context(viewport={"width": 375, "height": 812}, device_scale_factor=2, is_mobile=True,
+                              has_touch=True, color_scheme="light")
+    page = ctx.new_page()
+    for path, heading in (("job-search", "Search jobs worldwide"), ("bulk-send", "Email many openings")):
+        page.goto(base + path)
+        wait_ready(page, heading)
+        no_horizontal_scroll(page, f"/{path} at 375px")
+    ctx.close()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default="http://localhost:8501")
     ap.add_argument("--steps", default="write,mobile,404,scout,sent")
     ap.add_argument("--site", default="https://www.sigmoid.com")
+    ap.add_argument("--sheet", default="", help="an .xlsx of openings for the bulk step (e.g. a Job search export)")
     args = ap.parse_args()
     base = args.url.rstrip("/") + "/"
     steps = args.steps.split(",")
@@ -162,7 +197,8 @@ def main() -> int:
             try:
                 {"write": lambda: step_write(page, base), "mobile": lambda: step_mobile(browser, base),
                  "404": lambda: step_404(page, base), "scout": lambda: step_scout(page, base, args.site),
-                 "sent": lambda: step_sent(page, base)}[name]()
+                 "sent": lambda: step_sent(page, base), "jobsearch": lambda: step_jobsearch(page, base),
+                 "bulk": lambda: step_bulk(page, base, args.sheet), "mobile2": lambda: step_mobile_new(browser, base)}[name]()
             except Exception as exc:
                 check(f"step {name}", False, f"{type(exc).__name__}: {str(exc)[:200]}")
         check("no JavaScript errors on the page", not errors, "; ".join(errors)[:200])

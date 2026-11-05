@@ -8,6 +8,17 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
+
+def _secrets_to_env() -> None:
+    """On Streamlit Community Cloud keys live in st.secrets, not .env; expose them like .env values."""
+    try:
+        import streamlit as st
+        for key, value in st.secrets.items():
+            if isinstance(value, (str, int, float)) and not os.getenv(key):
+                os.environ[key] = str(value)
+    except Exception:  # no secrets.toml locally: .env is used
+        pass
+
 # Hosted, OpenAI-compatible providers that serve Qwen for free.
 PROVIDERS = {
     "groq": {
@@ -44,6 +55,8 @@ class Settings:
     imap_host: str
     apify_token: str
     followup_days: list[int]  # days after the previous email when each follow-up is due
+    bulk_daily_limit: int = 40  # most emails (incl. follow-ups) per day; protects the Gmail account
+    bulk_delay_secs: int = 30  # pause between bulk emails
 
     @property
     def use_embeddings(self) -> bool:
@@ -51,6 +64,7 @@ class Settings:
 
 
 def load_settings() -> Settings:
+    _secrets_to_env()
     provider = os.getenv("LLM_PROVIDER", "groq").lower()
     if provider not in PROVIDERS:
         raise ValueError(f"LLM_PROVIDER must be one of {list(PROVIDERS)}, got {provider!r}")
@@ -71,4 +85,6 @@ def load_settings() -> Settings:
         imap_host=os.getenv("IMAP_HOST", "imap.gmail.com"),
         apify_token=os.getenv("APIFY_API_TOKEN", ""),
         followup_days=[int(d) for d in os.getenv("FOLLOWUP_DAYS", "4,7").split(",") if d.strip()],
+        bulk_daily_limit=int(os.getenv("BULK_DAILY_LIMIT", "40")),
+        bulk_delay_secs=max(10, int(os.getenv("BULK_DELAY_SECONDS", "30"))),
     )

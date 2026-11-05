@@ -43,13 +43,14 @@ def button(at: AppTest, label: str):
 
 
 @pytest.mark.parametrize("page, title", [("write", "Write a cold email"), ("find-openings", "Find openings on a company website"),
+                                         ("job-search", "Search jobs worldwide"), ("bulk-send", "Email many openings"),
                                          ("sent", "Sent emails & follow-ups"), ("not-found", "Page not found")])
 def test_every_page_renders(page, title, sent_log):
     at = open_page(page).run()
     assert not at.exception, at.exception
     assert [t.value for t in at.title] == [title]
     footer_links = {p.label for p in at.get("page_link")}
-    assert {"Write email", "Find openings", "Sent & follow-ups", "Get a Groq API key"} <= footer_links
+    assert {"Write email", "Find openings", "Job search", "Bulk send", "Sent & follow-ups", "Get a Groq API key"} <= footer_links
 
 
 def test_generate_validates_input_on_first_click(sent_log):
@@ -127,3 +128,66 @@ def test_inbox_check_without_threads_says_so(sent_log):
     at = open_page("sent").run()
     button(at, "Check inbox for replies & bounces").click().run()
     assert any("No threads are awaiting" in i.value for i in at.info)
+
+
+# ---------------- job search and bulk send ----------------
+def test_job_search_validates_and_shows_results(sent_log):
+    from agent.jobsearch import normalize
+    from test_jobsearch_bulk import ITEM
+    at = open_page("job-search").run()
+    button(at, "Search jobs").click().run()
+    assert "Enter at least one job title" in errors(at)
+    at.session_state["jobs"] = [normalize(ITEM), normalize(dict(ITEM, id="2", title="BI Intern", description=""))]
+    at.session_state["jobs_summary"] = {"Keywords": "Data Analyst"}
+    at.run()
+    assert not at.exception, at.exception
+    assert [m.value for m in at.metric][:2] == ["2", "1"]  # jobs, with HR email
+    assert any(getattr(b, "label", "") == "Download Excel" for b in at.get("download_button"))
+    at.toggle(key="js_only_email").set_value(True).run()
+    assert not at.exception
+
+
+def test_bulk_send_drafts_reviews_and_sends(sent_log, monkeypatch):
+    import agent.bulk as bulk_mod
+    import agent.mailer as mailer
+    from test_core import FakeSMTP
+
+    def fake_draft(llm, kb, op, style, sender):
+        op.subject, op.body, op.evidence = f"{op.title} application", f"Hi {op.company} team,\n\nThanks,\n{sender}", ["SQL"]
+
+    monkeypatch.setattr(bulk_mod, "draft", fake_draft)
+    monkeypatch.setattr(mailer.smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    at = open_page("bulk-send")
+    at.session_state["bulk_rows"] = [
+        {"row": 2, "email": "hr@acme.example.org", "title": "SDE Intern", "company": "Acme", "job_url": "", "description": ""},
+        {"row": 3, "email": "jobs@beta.example.org", "title": "Analyst", "company": "Beta", "job_url": "", "description": ""},
+        {"row": 4, "email": "", "raw_email": "n/a", "title": "X", "company": "Gamma", "job_url": "", "description": ""}]
+    at.session_state["bulk_source"] = "test.xlsx"
+    at.run()
+    assert not at.exception, at.exception
+    assert [m.value for m in at.metric][:4] == ["3", "2", "0", "1"]
+    button(at, "Draft emails").click().run()
+    assert not at.exception, at.exception
+    assert [t.value for t in at.text_input if t.key == "bulkd_to_0"] == ["hr@acme.example.org"]
+    button(at, "Send 2 emails").click().run()
+    assert "Tick the review box" in errors(at) and sent_log.all() == []
+    at.checkbox(key="bulkd_inc_1").uncheck().run()  # send only the first draft
+    at.checkbox(key="bulk_confirm").check().run()
+    button(at, "Send 1 emails").click().run()
+    assert not at.exception, at.exception
+    assert [e.to for e in sent_log.all()] == ["hr@acme.example.org"]
+    assert any("Sent 1 emails" in t.value for t in at.toast)
+    assert any("Sent" in m.value for m in at.markdown)  # the sent draft is marked
+
+
+def test_password_gate(sent_log, monkeypatch):
+    monkeypatch.setenv("APP_PASSWORD", "s3cret")
+    at = open_page("write").run()
+    assert [t.value for t in at.title] == ["Sign in"]
+    at.text_input[0].set_value("wrong")
+    at.button[0].click().run()
+    assert "Wrong password" in errors(at)
+    at.text_input[0].set_value("s3cret")
+    at.button[0].click().run()
+    assert [t.value for t in at.title] == ["Write a cold email"]

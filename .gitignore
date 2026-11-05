@@ -13,3 +13,6 @@ __pycache__/
 
 # Office lock files
 ~$*
+
+# Streamlit secrets (keys for a hosted deployment)
+.streamlit/secrets.toml

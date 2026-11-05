@@ -1,7 +1,11 @@
 """Streamlit UI for the cold-email agent.  Run:  streamlit run app.py"""
 import hashlib
+import hmac
 import json
+import os
 import re
+import time
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
@@ -9,9 +13,14 @@ from urllib.parse import urlparse
 import streamlit as st
 
 from agent.agent import CTAS, LENGTHS, TONES, ColdEmailAgent, EmailStyle, find_placeholders, refine_email
+from agent.bulk import LOOKUP, READY, draft, find_email_on_page, plan, problems, sent_today
+from agent.bulk import now as bulk_now
 from agent.config import COLLECTION, load_settings
 from agent.errors import friendly_error
+from agent.excel import read_openings, write_jobs, write_results
 from agent.followup import SentEmail, SentLog, generate_followup, reply_subject
+from agent.jobsearch import (COST_PER_JOB_USD, EXPERIENCE, JOB_TYPES, LOCATION_PRESETS, POSTED, WORKPLACES, JobSearch,
+                             parse_list, search_jobs)
 from agent.llm import LLM
 from agent.mailer import check_threads, days_since, send_email
 from agent.rag import KnowledgeBase
@@ -29,6 +38,20 @@ st.set_page_config(page_title=APP_NAME, page_icon=str(ASSETS / "favicon.png"), l
 settings = load_settings()
 ss = st.session_state
 sent_log = SentLog()
+
+# When APP_PASSWORD is set (always, for a public deployment), nobody can use the app, and so the
+# Gmail account and API keys behind it, without the password.
+if (app_password := os.getenv("APP_PASSWORD", "")) and not ss.get("signed_in"):
+    st.logo(str(ASSETS / "logo.png"), size="large")
+    st.title("Sign in")
+    with st.form("sign_in"):
+        given = st.text_input("Password", type="password")
+        if st.form_submit_button("Sign in", type="primary"):
+            if hmac.compare_digest(given.encode(), app_password.encode()):
+                ss["signed_in"] = True
+                st.rerun()
+            st.error("Wrong password.", icon=":material/error:")
+    st.stop()
 
 QUICK_EDITS = {
     "Shorter": "Make it about 30% shorter without losing the proof points.",
@@ -53,13 +76,17 @@ for key, value in ss.pop("pending", {}).items():
 # Streamlit forgets a widget's value when its page isn't shown; re-assigning keeps
 # drafts and settings alive while you switch between pages.
 PERSIST = ("target_", "style_", "draft_", "review_pass", "send_attach", "fu_body_", "fu_extra_", "scout_site", "scout_pref",
-           "scout_pages")
+           "scout_pages", "js_", "bulko_", "bulkd_", "bulk_confirm")
 for key in [k for k in ss.keys() if isinstance(k, str) and k.startswith(PERSIST)]:
     ss[key] = ss[key]
 ss.setdefault("style_length", "Medium")
 ss.setdefault("review_pass", True)
 ss.setdefault("scout_pages", 25)
 ss.setdefault("uploader_n", 0)
+for key, value in {"js_locations": ["India"], "js_posted": "Past week", "js_per_search": 25, "js_find_emails": True,
+                   "bulko_length": "Medium", "bulko_count": 10, "bulko_delay": settings.bulk_delay_secs,
+                   "bulko_lookup": True}.items():
+    ss.setdefault(key, value)
 
 
 # ---------------- helpers ----------------
@@ -519,6 +546,291 @@ def draft_for(res, recipient: str, opening) -> None:
           autogen=True)
 
 
+# ---------------- page: job search ----------------
+def page_jobsearch() -> None:
+    head("Job search")
+    st.title("Search jobs worldwide")
+    st.caption("Searches LinkedIn job listings through Apify with your filters, then gives you an Excel sheet with "
+               "each job's link, the recruiter who posted it and any HR email found. Use the sheet in Bulk send.")
+    if not settings.apify_token:
+        st.warning("Job search needs an Apify token. Add APIFY_API_TOKEN to .env, then restart the app.",
+                   icon=":material/key:")
+    chosen = ss.get("js_locations", [])
+    location_options = LOCATION_PRESETS + [loc for loc in chosen if loc not in LOCATION_PRESETS]
+    with st.form("jobsearch_form", border=False):
+        c1, c2 = st.columns(2)
+        c1.text_input("Job titles or keywords", key="js_keywords",
+                      help="Separate several with commas, e.g. `Data Analyst, Python Developer`. Each is its own search.")
+        c2.multiselect("Locations", location_options, key="js_locations", accept_new_options=True,
+                       help="Pick from the list or type any city or country. Worldwide searches every country.")
+        c3, c4, c5, c6 = st.columns(4)
+        c3.selectbox("Posted", list(POSTED), key="js_posted")
+        c4.multiselect("Job type", list(JOB_TYPES), key="js_types", placeholder="Any")
+        c5.multiselect("Workplace", list(WORKPLACES), key="js_workplaces", placeholder="Any")
+        c6.multiselect("Experience", list(EXPERIENCE), key="js_experience", placeholder="Any")
+        c7, c8 = st.columns([2, 1], vertical_alignment="bottom")
+        c7.slider("Results per search", 10, 100, step=5, key="js_per_search",
+                  help="Each keyword × location pair is one search.")
+        c8.checkbox("Find HR emails on company websites", key="js_find_emails",
+                    help="Free. Visits each company's site for careers@ or hr@ addresses; adds about a minute.")
+        st.caption(f"Apify charges about ${COST_PER_JOB_USD * 100:.2f} per 100 jobs from your credit; "
+                   "a search usually takes 2 to 5 minutes.")
+        submitted = st.form_submit_button("Search jobs", type="primary", icon=":material/search:")
+    if submitted:
+        search = JobSearch(keywords=parse_list(ss.get("js_keywords", "")), locations=list(ss.get("js_locations", [])),
+                           posted=ss.js_posted, job_types=list(ss.get("js_types", [])),
+                           workplaces=list(ss.get("js_workplaces", [])), experience=list(ss.get("js_experience", [])),
+                           per_search=ss.js_per_search, find_emails=ss.js_find_emails)
+        errors = search.validate()
+        if not settings.apify_token:
+            errors.append("APIFY_API_TOKEN is missing from .env.")
+        if not show_errors(errors):
+            with st.status("Searching jobs… this usually takes 2 to 5 minutes", expanded=True) as status:
+                try:
+                    jobs = search_jobs(settings, search, on_step=st.write)
+                except Exception as exc:
+                    status.update(label="Search failed", state="error")
+                    st.error(friendly_error(exc), icon=":material/error:")
+                else:
+                    ss["jobs"], ss["jobs_summary"] = jobs, search.summary()
+                    status.update(label=f"Done · {len(jobs)} jobs", state="complete", expanded=False)
+                    st.toast(f"Found {len(jobs)} jobs, {sum(bool(j.email) for j in jobs)} with an HR email",
+                             icon=":material/check_circle:")
+    jobs = ss.get("jobs")
+    if jobs is not None:
+        jobsearch_results(jobs)
+
+
+def job_to_row(n: int, j) -> dict:
+    return {"row": n, "email": j.email, "raw_email": j.email, "other_emails": j.other_emails, "title": j.title,
+            "company": j.company, "job_url": j.job_url, "location": j.location, "recruiter": j.recruiter,
+            "description": j.description}
+
+
+def jobsearch_results(jobs: list) -> None:
+    st.divider()
+    if not jobs:
+        st.info("No jobs matched. Try a longer time period, fewer filters or another location.", icon=":material/info:")
+        return
+    with st.container(horizontal=True, wrap=True, gap="medium"):
+        for label, value in (("Jobs", len(jobs)), ("With HR email", sum(bool(j.email) for j in jobs)),
+                             ("With recruiter", sum(bool(j.recruiter) for j in jobs)),
+                             ("Companies", len({j.company for j in jobs}))):
+            st.metric(label, value, border=True, width=150)
+    shown = [j for j in jobs if j.email] if st.toggle("Only jobs with an HR email", key="js_only_email") else jobs
+    st.dataframe(
+        [{"Posted": j.posted_date, "Job title": j.title, "Company": j.company, "Location": j.location,
+          "Type": j.job_type, "HR email": j.email, "Recruiter": j.recruiter, "Job link": j.job_url,
+          "Recruiter profile": j.recruiter_url} for j in shown],
+        column_config={"Job link": st.column_config.LinkColumn(display_text="Open job"),
+                       "Recruiter profile": st.column_config.LinkColumn(display_text="Profile")},
+        hide_index=True, use_container_width=True)
+    c1, c2 = st.columns(2)
+    c1.download_button("Download Excel", write_jobs(shown, ss.get("jobs_summary", {})), type="primary",
+                       file_name=f"mailmind_jobs_{datetime.now():%Y-%m-%d}.xlsx", icon=":material/download:",
+                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+    if c2.button("Email these openings in Bulk send", icon=":material/arrow_forward:", use_container_width=True):
+        ss["bulk_rows"] = [job_to_row(n, j) for n, j in enumerate(shown, 2)]
+        ss["bulk_source"] = f"Job search results ({len(shown)} jobs)"
+        ss.pop("bulk_items", None)
+        flash(f"Loaded {len(shown)} jobs into Bulk send")
+        st.switch_page(PAGES["bulk"])
+
+
+# ---------------- page: bulk send ----------------
+def page_bulk() -> None:
+    head("Bulk send")
+    kb = get_kb()
+    st.title("Email many openings")
+    st.caption("Upload a sheet of openings: the Job search export, or your own Excel with an HR email or job-link "
+               "column. MailMind drafts one email per opening from your resume, you review them, and they are sent "
+               f"one at a time with a pause between emails, at most {settings.bulk_daily_limit} a day.")
+    up = st.file_uploader("Openings sheet (.xlsx)", type=["xlsx"], key="bulk_file",
+                          help="It looks for these columns: HR email (or Email), Job title, Company, Job link, Description.")
+    if up is not None and ss.get("bulk_file_id") != up.file_id:
+        ss["bulk_file_id"] = up.file_id
+        rows, probs = read_openings(up.getvalue())
+        if not show_errors(probs):
+            ss["bulk_rows"], ss["bulk_source"] = rows, up.name
+            ss.pop("bulk_items", None)
+            st.toast(f"Read {len(rows)} rows from {up.name}", icon=":material/check_circle:")
+    rows = ss.get("bulk_rows")
+    if not rows:
+        st.info("Upload a sheet, or run a Job search and choose “Email these openings in Bulk send”.",
+                icon=":material/info:")
+        return
+
+    openings = plan(rows, sent_log)
+    counts = Counter(o.status for o in openings)
+    remaining = max(0, settings.bulk_daily_limit - sent_today(sent_log))
+    st.subheader(f"1 · {ss.get('bulk_source', 'Your sheet')}")
+    with st.container(horizontal=True, wrap=True, gap="medium"):
+        for label, value in (("Rows", len(openings)), ("Ready", counts[READY]), ("Email to find", counts[LOOKUP]),
+                             ("Skipped", len(openings) - counts[READY] - counts[LOOKUP]),
+                             ("Left today", remaining)):
+            st.metric(label, value, border=True, width=135)
+    skipped = [o for o in openings if o.status not in (READY, LOOKUP)]
+    if skipped:
+        with st.expander(f"{len(skipped)} rows will be skipped"):
+            st.dataframe([{"Row": o.row, "Opening": o.label, "Email": o.to, "Reason": o.status} for o in skipped],
+                         hide_index=True, use_container_width=True)
+
+    st.subheader("2 · Draft the emails")
+    can_draft = counts[READY] + counts[LOOKUP]
+    max_count = max(1, min(50, can_draft))
+    ss["bulko_count"] = min(ss.get("bulko_count", 10), max_count)  # a smaller sheet than last time
+    with st.form("bulk_form", border=False):
+        c1, c2, c3 = st.columns(3)
+        c1.selectbox("Tone", list(TONES), key="bulko_tone")
+        c2.selectbox("Length", list(LENGTHS), key="bulko_length",
+                     format_func=lambda k: f"{k} ({LENGTHS[k][0]}-{LENGTHS[k][1]} words)")
+        c3.selectbox("Call to action", list(CTAS), key="bulko_cta")
+        c4, c5 = st.columns(2)
+        if max_count > 1:
+            c4.slider("How many to draft", 1, max_count, key="bulko_count",
+                      help="Each draft is one model call; about 3 a minute on Groq's free tier.")
+        else:
+            c4.caption("One opening to draft.")
+        c5.slider("Pause between emails (seconds)", 10, 120, key="bulko_delay",
+                  help="Spacing emails out keeps Gmail from flagging your account.")
+        st.checkbox("Look for an email on the job page when a row only has a link", key="bulko_lookup",
+                    disabled=not counts[LOOKUP])
+        st.checkbox("I'll attach my resume (the emails will mention it)", key="bulko_attach")
+        go = st.form_submit_button("Draft emails", type="primary", icon=":material/auto_awesome:")
+    if go:
+        errors = []
+        if not settings.api_key:
+            errors.append("GROQ_API_KEY is missing from .env.")
+        if not can_draft:
+            errors.append("No row has a usable email address or job link.")
+        if not show_errors(errors):
+            draft_bulk(openings, kb)
+
+    items = ss.get("bulk_items")
+    if items:
+        review_bulk(items, kb, remaining)
+
+
+def draft_bulk(openings: list, kb: KnowledgeBase) -> None:
+    style = EmailStyle(tone=ss.bulko_tone, length=ss.bulko_length, cta=ss.bulko_cta, attach_resume=ss.bulko_attach)
+    wanted = ss.bulko_count
+    queue = [o for o in openings if o.status == READY] + ([o for o in openings if o.status == LOOKUP] if ss.bulko_lookup else [])
+    llm, drafted, used, failed = LLM(settings), [], set(), []
+    bar = st.progress(0.0, text=f"Drafting 0 of {wanted}…")
+    for op in queue:
+        if len(drafted) >= wanted:
+            break
+        if op.status == LOOKUP and not find_email_on_page(op):
+            failed.append(f"{op.label}: {op.detail}")
+            continue
+        if op.to in used:
+            continue
+        try:
+            draft(llm, kb, op, style, settings.sender_name)
+        except Exception as exc:
+            failed.append(f"{op.label}: {friendly_error(exc)}")
+            continue
+        used.add(op.to)
+        drafted.append(op)
+        bar.progress(len(drafted) / wanted, text=f"Drafting {len(drafted)} of {wanted}… ({op.label})")
+    for f in failed[:10]:
+        st.warning(f, icon=":material/warning:")
+    if not drafted:
+        st.error("No drafts could be written. See the messages above.", icon=":material/error:")
+        return
+    ss["bulk_items"] = drafted
+    values = {"bulk_confirm": False}
+    for i, op in enumerate(drafted):
+        values |= {f"bulkd_inc_{i}": True, f"bulkd_to_{i}": op.to, f"bulkd_subj_{i}": op.subject, f"bulkd_body_{i}": op.body}
+    flash(f"{len(drafted)} drafts ready for review" + (f"; {len(failed)} openings skipped" if failed else ""))
+    rerun(**values)
+
+
+def review_bulk(items: list, kb: KnowledgeBase, remaining: int) -> None:
+    st.subheader(f"3 · Review {len(items)} drafts")
+    for i, op in enumerate(items):
+        with st.container(border=True):
+            if op.status == "sent":
+                st.markdown(f":green-badge[Sent] **{md_escape(op.label)}** to {md_escape(op.to)}")
+                continue
+            head_col, link_col = st.columns([4, 1], vertical_alignment="center")
+            head_col.checkbox(f"**{md_escape(op.label)}**", key=f"bulkd_inc_{i}")
+            if safe_link(op.job_url):
+                link_col.link_button("Job", op.job_url, icon=":material/open_in_new:")
+            if op.status == "failed":
+                st.error(f"Last attempt failed: {op.detail}", icon=":material/error:")
+            st.text_input("To", key=f"bulkd_to_{i}")
+            st.text_input("Subject", key=f"bulkd_subj_{i}")
+            st.text_area("Body", key=f"bulkd_body_{i}", height=200)
+            sync(op, i)
+            for issue in problems(op):
+                st.warning(issue.capitalize(), icon=":material/warning:")
+
+    pending_items = [(i, op) for i, op in enumerate(items) if op.status != "sent" and ss.get(f"bulkd_inc_{i}")]
+    resumes = [f for f in kb.files() if f.suffix.lower() == ".pdf"]
+    attachments = [resumes[0]] if resumes and ss.get("bulko_attach") else []
+    if attachments:
+        st.caption(f"Attaching {resumes[0].name} to every email.")
+    confirm = st.checkbox(f"I've reviewed the {len(pending_items)} selected emails and want to send them", key="bulk_confirm")
+    if st.button(f"Send {len(pending_items)} emails", type="primary", icon=":material/send:"):
+        errors = []
+        if not smtp_ready():
+            errors.append("Email isn't connected. Set SMTP_USER and SMTP_PASSWORD in .env and restart the app.")
+        if not pending_items:
+            errors.append("Select at least one draft.")
+        if len(pending_items) > remaining:
+            errors.append(f"Only {remaining} more emails are allowed today (BULK_DAILY_LIMIT). Deselect some drafts.")
+        bad = [f"{op.label}: {', '.join(problems(op))}" for _, op in pending_items if problems(op)]
+        if bad:
+            errors.append("Fix these drafts first: " + "; ".join(bad[:5]))
+        if not confirm:
+            errors.append("Tick the review box to confirm you want to send them.")
+        if not show_errors(errors):
+            send_bulk(items, pending_items, attachments)
+    done = [op for op in items if op.status in ("sent", "failed")]
+    if done:
+        st.download_button("Download send report", write_results([{
+            "status": op.status, "to": op.to, "title": op.title, "company": op.company, "job_url": op.job_url,
+            "subject": op.subject, "sent_at": op.detail if op.status == "sent" else "",
+            "detail": op.detail if op.status == "failed" else ""} for op in items]),
+            file_name=f"mailmind_bulk_send_{datetime.now():%Y-%m-%d}.xlsx", icon=":material/download:",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+def sync(op, i: int) -> None:
+    """Copy the reviewed (possibly edited) widget values back into the opening."""
+    op.to = ss.get(f"bulkd_to_{i}", op.to).strip().lower()
+    op.subject, op.body = ss.get(f"bulkd_subj_{i}", op.subject), ss.get(f"bulkd_body_{i}", op.body)
+
+
+def send_bulk(items: list, pending_items: list, attachments: list) -> None:
+    delay = ss.bulko_delay
+    st.button("Stop sending", icon=":material/stop_circle:", help="Emails already sent stay sent; the rest wait.")
+    sent = failed = 0
+    with st.status(f"Sending {len(pending_items)} emails, {delay} s apart…", expanded=True) as status:
+        for k, (i, op) in enumerate(pending_items):
+            try:
+                message_id = send_email(settings, op.to, op.subject, op.body, attachments=attachments)
+            except Exception as exc:
+                op.status, op.detail = "failed", friendly_error(exc)
+                failed += 1
+                st.write(f":material/error: {op.to}: {op.detail}")
+            else:
+                sent_log.add(SentEmail(to=op.to, subject=op.subject, body=op.body, message_id=message_id,
+                                       target=op.label, evidence=op.evidence))
+                op.status, op.detail = "sent", bulk_now()
+                sent += 1
+                st.write(f":material/check_circle: Sent to {op.to} ({op.label})")
+            ss["bulk_items"] = items  # progress survives a stop or reload
+            if k < len(pending_items) - 1:
+                time.sleep(delay)
+        status.update(label=f"Sent {sent}" + (f", {failed} failed" if failed else ""),
+                      state="complete" if not failed else "error", expanded=bool(failed))
+    flash(f"Sent {sent} emails" + (f"; {failed} failed" if failed else "") + ". Track them in Sent & follow-ups.",
+          ":material/mark_email_read:")
+    rerun(bulk_confirm=False)
+
+
 # ---------------- page: sent & follow-ups ----------------
 STATUS_BADGE = {"awaiting": ":blue-badge[Awaiting reply]", "replied": ":green-badge[Replied]",
                 "bounced": ":red-badge[Bounced]", "closed": ":gray-badge[Closed]"}
@@ -669,6 +981,8 @@ def page_not_found() -> None:
     </script>""", unsafe_allow_javascript=True)
     st.page_link(PAGES["write"], label="Go to Write email", icon=":material/edit_note:")
     st.page_link(PAGES["scout"], label="Go to Find openings", icon=":material/travel_explore:")
+    st.page_link(PAGES["jobs"], label="Go to Job search", icon=":material/work:")
+    st.page_link(PAGES["bulk"], label="Go to Bulk send", icon=":material/outgoing_mail:")
     st.page_link(PAGES["sent"], label="Go to Sent & follow-ups", icon=":material/forward_to_inbox:")
 
 
@@ -681,6 +995,8 @@ def footer() -> None:
         st.markdown("**Pages**")
         st.page_link(PAGES["write"], label="Write email")
         st.page_link(PAGES["scout"], label="Find openings")
+        st.page_link(PAGES["jobs"], label="Job search")
+        st.page_link(PAGES["bulk"], label="Bulk send")
         st.page_link(PAGES["sent"], label="Sent & follow-ups")
     with c3:
         st.markdown("**Setup help**")
@@ -692,6 +1008,8 @@ def footer() -> None:
 PAGES = {
     "write": st.Page(page_write, title="Write email", icon=":material/edit_note:", url_path="write", default=True),
     "scout": st.Page(page_scout, title="Find openings", icon=":material/travel_explore:", url_path="find-openings"),
+    "jobs": st.Page(page_jobsearch, title="Job search", icon=":material/work:", url_path="job-search"),
+    "bulk": st.Page(page_bulk, title="Bulk send", icon=":material/outgoing_mail:", url_path="bulk-send"),
     "sent": st.Page(page_sent, title="Sent & follow-ups", icon=":material/forward_to_inbox:", url_path="sent"),
     "404": st.Page(page_not_found, title="Page not found", url_path="not-found", visibility="hidden"),
 }
